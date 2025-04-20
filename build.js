@@ -12,18 +12,26 @@ const destCssPath = path.join(distDir, 'style.css');
 const destJsPath = path.join(distDir, 'script.js');
 
 
+// Simple HTML escaping function for attribute values and text content
+function escapeHtml(unsafe) {
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;"); // Escape single quotes
+}
+
+// Simple HTML escaping function specifically for embedding in single-quoted attributes
+function escapeForSingleQuotedAttr(unsafe) {
+    return unsafe.replace(/'/g, "&#039;"); // Escape single quotes
+}
+
+
 function buildWebsite() {
     try {
-        // 1. Read icons.json
-        const iconifyJson = JSON.parse(fs.readFileSync(iconsJsonPath, 'utf-8'));
-        const icons = iconifyJson.icons || {};
-        const defaultWidth = iconifyJson.width || 24;
-        const defaultHeight = iconifyJson.height || 24;
+        // ... (read json and template, get default dimensions) ...
 
-        // 2. Read the source HTML template
-        let htmlContent = fs.readFileSync(srcHtmlPath, 'utf-8');
-
-        // 3. Generate HTML for icons
         let iconsHtml = '';
          const iconNames = Object.keys(icons);
 
@@ -35,7 +43,7 @@ function buildWebsite() {
                      const iconData = icons[iconName];
                      if (!iconData || typeof iconData.body !== 'string') {
                           console.warn(`Skipping invalid icon data for "${escapeHtml(iconName)}". Missing 'body' or 'body' is not a string.`);
-                          continue; // Skip this icon if data is invalid
+                          continue;
                      }
 
                      const iconWidth = iconData.width || defaultWidth;
@@ -44,66 +52,69 @@ function buildWebsite() {
                      // Embed SVG directly for preview.
                      const svgNs = "http://www.w3.org/2000/svg";
                       // Important: set viewBox and xmlns for the embedded SVG
-                     const svgHtml = `<svg xmlns="${svgNs}" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${iconWidth} <span class="math-inline">\{iconHeight\}" style\="width\: 64px; height\: 64px; display\: block; margin\: 0 auto 15px auto;"\></span>{iconData.body}</svg>`;
+                     const svgHtml = `<svg xmlns="${svgNs}" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${iconWidth} ${iconHeight}" style="width: 64px; height: 64px; display: block; margin: 0 auto 15px auto;">${iconData.body}</svg>`;
 
-                     // Pass necessary data to client-side JS functions via onclick attributes
-                     // iconData object needs to be stringified and safely embedded
+                     // --- MODIFIED: Use data-* attributes to store data ---
                      const safeIconName = escapeHtml(iconName);
-                     const safeIconData = JSON.stringify(iconData).replace(/'/g, "&#039;").replace(/"/g, "&quot;"); // Escape quotes for HTML attribute
+                     // Stringify iconData and escape single quotes for embedding in a single-quoted attribute
+                     const safeIconDataString = escapeForSingleQuotedAttr(JSON.stringify(iconData));
+
 
                      iconsHtml += `
                      <div class="icon-item">
-                         <span class="math-inline">\{svgHtml\}<p>{safeIconName}</p>
+                         ${svgHtml}
+                         <p>${safeIconName}</p>
                          <div class="icon-buttons">
-                         <button onclick='window.downloadSvgFromData(this, "safeIconName",JSON.parse("{safeIconData}"))'>SVG</button>
-                         <button onclick='window.downloadPngFromData(this, "safeIconName",JSON.parse("{safeIconData}"))'>PNG</button>
-                         </div>
-                         </div>`;
-                         }
-                         }
-                         }         // If after processing, no valid icons were added
-                         if (iconsHtml === '') {
-                             iconsHtml = '<p id="initial-message">No valid icons found in the JSON file.</p>';
-                         }
-                
-                
-                        // 4. Inject generated icons HTML into the template
-                        htmlContent = htmlContent.replace('', iconsHtml);
-                
-                        // 5. Create output directory if it doesn't exist
-                        if (!fs.existsSync(distDir)){
-                            fs.mkdirSync(distDir);
-                        }
-                
-                        // 6. Write the final index.html
-                        fs.writeFileSync(destHtmlPath, htmlContent, 'utf-8');
-                
-                        // 7. Copy CSS and JS files to the output directory
-                        fs.copyFileSync(srcCssPath, destCssPath);
-                        fs.copyFileSync(srcJsPath, destJsPath);
-                
-                
-                        console.log('Website built successfully!');
-                
-                    } catch (error) {
-                        console.error('Error building website:', error);
-                        // Provide more specific error if JSON parsing failed
-                        if (error instanceof SyntaxError) {
-                            console.error('Reason: icons.json is likely malformed.');
-                        }
-                        process.exit(1); // Exit with error code to signal failure to GitHub Actions
-                    }
-                }
-                
-                // Simple HTML escaping function for names
-                function escapeHtml(unsafe) {
-                    return unsafe
-                         .replace(/&/g, "&amp;")
-                         .replace(/</g, "&lt;")
-                         .replace(/>/g, "&gt;")
-                         .replace(/"/g, "&quot;")
-                         .replace(/'/g, "&#039;");
-                }
-                
-                
-                buildWebsite();
+                             <button
+                                 data-icon-name="${safeIconName}"
+                                 data-icon-data='${safeIconDataString}'  // Store stringified JSON in data attribute
+                                 onclick="window.handleSvgDownload(this)">SVG</button> <button
+                                 data-icon-name="${safeIconName}"
+                                 data-icon-data='${safeIconDataString}' // Store stringified JSON in data attribute
+                                 onclick="window.handlePngDownload(this)">PNG</button> </div>
+                     </div>`;
+                     // --- END MODIFIED ---
+                 }
+             }
+         }
+
+
+         // If after processing, no valid icons were added
+         if (iconsHtml === '') {
+             iconsHtml = '<p id="initial-message">No valid icons found in the JSON file.</p>';
+         }
+
+
+        // 4. Inject generated icons HTML into the template
+        htmlContent = htmlContent.replace('', iconsHtml);
+
+        // ... (create dist directory, write files) ...
+
+        console.log('Website built successfully!');
+
+    } catch (error) {
+        console.error('Error building website:', error);
+        if (error instanceof SyntaxError) {
+            console.error('Reason: icons.json is likely malformed.');
+        }
+        process.exit(1);
+    }
+}
+
+// Simple HTML escaping function for names and text content
+function escapeHtml(unsafe) {
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
+// Simple HTML escaping function specifically for embedding in single-quoted attributes
+function escapeForSingleQuotedAttr(unsafe) {
+    return unsafe.replace(/'/g, "&#039;"); // Escape single quotes for attribute value
+}
+
+
+buildWebsite();
