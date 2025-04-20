@@ -13,6 +13,11 @@ const destHtmlPath = path.join(distDir, 'index.html');
 const destCssPath = path.join(distDir, 'style.css');
 const destJsPath = path.join(distDir, 'script.js');
 
+// Define the placeholder string - MUST MATCH src/index.html EXACTLY
+// Changed from comment to a div element for easier debugging if replacement fails
+const INJECTION_PLACEHOLDER = '<div id="icon-injection-target"></div>';
+
+
 // Simple HTML escaping function for names and text content
 function escapeHtml(unsafe) {
     return unsafe
