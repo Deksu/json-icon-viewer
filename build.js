@@ -14,9 +14,8 @@ const destCssPath = path.join(distDir, 'style.css');
 const destJsPath = path.join(distDir, 'script.js');
 
 // Define the placeholder string - MUST MATCH src/index.html EXACTLY
-// Changed from comment to a div element for easier debugging if replacement fails
+// We use a div element with a unique ID for easier debugging if replacement fails
 const INJECTION_PLACEHOLDER = '<div id="icon-injection-target"></div>';
-
 
 // Simple HTML escaping function for names and text content
 function escapeHtml(unsafe) {
@@ -29,6 +28,7 @@ function escapeHtml(unsafe) {
 }
 
 // Simple HTML escaping function specifically for embedding strings in single-quoted HTML attributes
+// This is crucial for the JSON string embedded in data-icon-data='...'
 function escapeSingleQuotesForAttr(unsafe) {
      return unsafe.replace(/'/g, "&#039;"); // Escape single quotes
 }
@@ -42,23 +42,27 @@ function buildWebsite() {
         console.log(`[Build] Starting website build process.`);
         console.log(`[Build] Checking for icons.json at: ${iconsJsonPath}`);
 
+        // --- Debug Check: Ensure icons.json exists ---
         if (!fs.existsSync(iconsJsonPath)) {
             console.error(`[Build] Error: icons.json not found at ${iconsJsonPath}.`);
             console.error(`[Build] Please ensure you have downloaded icons.json from the Figma plugin and placed it at the root of the repository.`);
-            process.exit(1);
+            process.exit(1); // Exit with error code if file is missing
         }
         console.log(`[Build] icons.json found.`);
+        // --- End Debug Check ---
 
         // 1. Read icons.json
         const fileContent = fs.readFileSync(iconsJsonPath, 'utf-8');
 
+        // --- Debug Check: Ensure file is not empty ---
         console.log(`[Build] Read file content successfully. Content length: ${fileContent.length}`);
          if (fileContent.trim().length === 0) {
               console.error("[Build] Error: icons.json appears to be empty. Exiting.");
               console.error("Reason: The file was read but contains only whitespace or is empty.");
-              process.exit(1);
+              process.exit(1); // Exit if file is empty
          }
          console.log(`[Build] File content is not empty. First 100 chars: ${fileContent.substring(0, 100)}`);
+        // --- End Debug Check ---
 
 
         // 2. Parse icons.json content
@@ -82,7 +86,7 @@ function buildWebsite() {
         // --- End Debug Checks ---
 
 
-        console.log('[Build] Checking parsed JSON structure:'); // This line is likely close to the error origin (line 22)
+        console.log('[Build] Checking parsed JSON structure:'); // This line is likely close to the error origin (line 22 in previous runs)
         // --- Structure Checks ---
         if (typeof iconifyJson !== 'object' || iconifyJson === null || Array.isArray(iconifyJson)) {
              console.error('[Build] Error: Parsed JSON is not an object as expected.');
@@ -111,13 +115,16 @@ function buildWebsite() {
         // 3. Read the source HTML template
         let htmlContent = fs.readFileSync(srcHtmlPath, 'utf-8');
         console.log(`[Build] Read source HTML template from: ${srcHtmlPath}`);
-         // Check placeholder exists
-        if (!htmlContent.includes('')) {
-            console.error('[Build] Error: Placeholder comment NOT found in source HTML template!');
-            console.error('Reason: The comment "" must be exactly present in src/index.html');
+
+         // --- Debug: Check if placeholder exists in template ---
+        if (htmlContent.includes(INJECTION_PLACEHOLDER)) {
+            console.log(`[Build] Placeholder div "${INJECTION_PLACEHOLDER}" found in source HTML template.`);
+        } else {
+            console.error(`[Build] Error: Placeholder div "${INJECTION_PLACEHOLDER}" NOT found in source HTML template!`);
+            console.error(`Reason: The div '<div id="icon-injection-target"></div>' must be exactly present in src/index.html`);
              process.exit(1);
         }
-         console.log('[Build] Placeholder comment found in source HTML template.');
+         // --- End Debug ---
 
 
         // 4. Generate HTML for icons
@@ -127,6 +134,7 @@ function buildWebsite() {
 
          if (iconNames.length === 0) {
               console.log('[Build] No icons found in JSON, generating empty state message.');
+              // If no icons, replace the placeholder div with the 'no icons' message paragraph
               iconsHtml = '<p id="initial-message">No icons found in the JSON file.</p>';
          } else {
              console.log('[Build] Starting to generate HTML for icons...');
@@ -145,6 +153,7 @@ function buildWebsite() {
                  const svgHtml = `<svg xmlns="${svgNs}" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${iconWidth} ${iconHeight}" style="width: 64px; height: 64px; display: block; margin: 0 auto 15px auto;">${iconData.body}</svg>`;
 
                  const safeIconName = escapeHtml(iconName);
+                 // Stringify iconData and escape single quotes for embedding in a single-quoted attribute value
                  const safeIconDataString = escapeSingleQuotesForAttr(JSON.stringify(iconData));
 
 
@@ -155,14 +164,12 @@ function buildWebsite() {
                      <div class="icon-buttons">
                          <button
                              data-icon-name="${safeIconName}"
-                             data-icon-data='${safeIconDataString}'
-                             onclick="window.handleSvgDownload(this)">SVG</button>
-                         <button
+                             data-icon-data='${safeIconDataString}' // Store stringified JSON in data attribute using single quotes
+                             onclick="window.handleSvgDownload(this)">SVG</button> <button
                              data-icon-name="${safeIconName}"
-                             data-icon-data='${safeIconDataString}'
-                             onclick="window.handlePngDownload(this)">PNG</button>
-                     </div>
-                 </div>`;
+                             data-icon-data='${safeIconDataString}' // Store stringified JSON in data attribute using single quotes
+                             onclick="window.handlePngDownload(this)">PNG</button> </div>
+                     </div>`;
              });
               console.log('[Build] Finished generating HTML for icons.');
          }
@@ -175,21 +182,26 @@ function buildWebsite() {
 
 
         // 5. Inject generated icons HTML into the template
-        console.log('[Build] Attempting to inject generated icons HTML into the template.');
-        const finalHtmlContent = htmlContent.replace('', iconsHtml);
+        console.log(`[Build] Attempting to inject generated icons HTML into the template by replacing "${INJECTION_PLACEHOLDER}".`);
+        // Replace the placeholder div with the generated icon HTML (or the 'no icons' message)
+        const finalHtmlContent = htmlContent.replace(INJECTION_PLACEHOLDER, iconsHtml);
         console.log('[Build] String replacement performed.');
 
-        if (finalHtmlContent.includes('')) {
-            console.error("[Build] Error: Placeholder comment was NOT replaced in the final HTML!");
-            console.error('Reason: The string replacement likely failed. Check the placeholder in src/index.html');
+        // --- Debug: Check if replacement was successful ---
+        // The placeholder div should *no longer* be present in the final content
+        if (finalHtmlContent.includes(INJECTION_PLACEHOLDER)) {
+            console.error(`[Build] Error: Placeholder div "${INJECTION_PLACEHOLDER}" was NOT replaced in the final HTML!`);
+            console.error('Reason: The string replacement likely failed. Check the placeholder in src/index.html and build.js for exact match.');
              process.exit(1);
         } else {
-             console.log("[Build] Placeholder comment successfully replaced in final HTML.");
+             console.log(`[Build] Placeholder div successfully replaced in final HTML.`);
         }
+         // --- End Debug ---
 
 
         // 6. Create output directory if it doesn't exist
         console.log(`[Build] Ensuring output directory exists: ${distDir}`);
+        // Use recursive: true to create parent directories if they don't exist
         if (!fs.existsSync(distDir)){
             fs.mkdirSync(distDir, { recursive: true });
             console.log(`[Build] Created output directory: ${distDir}`);
@@ -204,9 +216,9 @@ function buildWebsite() {
         console.log('[Build] index.html written.');
 
         // 8. Copy CSS and JS files to the output directory
-        console.log(`[Build] Copying style.css to: ${destCssPath}`);
+        console.log(`[Build] Copying style.css from ${srcCssPath} to ${destCssPath}`);
         fs.copyFileSync(srcCssPath, destCssPath);
-         console.log(`[Build] Copying script.js to: ${destJsPath}`);
+         console.log(`[Build] Copying script.js from ${srcJsPath} to ${destJsPath}`);
         fs.copyFileSync(srcJsPath, destJsPath);
         console.log('[Build] CSS and JS files copied.');
 
@@ -232,9 +244,6 @@ function buildWebsite() {
         process.exit(1); // Exit with error code to signal failure
     }
 }
-
-// ... (escapeHtml and escapeSingleQuotesForAttr functions remain below) ...
-
 
 // Call the build function
 buildWebsite();
