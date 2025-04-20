@@ -1,25 +1,102 @@
+// build.js
 const fs = require('fs');
 const path = require('path');
 
+// Define paths for source and destination files/directories
 const iconsJsonPath = path.join(__dirname, 'icons.json');
 const srcHtmlPath = path.join(__dirname, 'src', 'index.html');
 const srcCssPath = path.join(__dirname, 'src', 'style.css');
 const srcJsPath = path.join(__dirname, 'src', 'script.js');
 
-const distDir = path.join(__dirname, 'dist');
+const distDir = path.join(__dirname, 'dist'); // Output directory for built website
 const destHtmlPath = path.join(distDir, 'index.html');
 const destCssPath = path.join(distDir, 'style.css');
 const destJsPath = path.join(distDir, 'script.js');
 
-// ... (escapeHtml and escapeSingleQuotesForAttr functions) ...
+// Simple HTML escaping function for names and text content
+function escapeHtml(unsafe) {
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;"); // Escape single quotes
+}
+
+// Simple HTML escaping function specifically for embedding strings in single-quoted HTML attributes
+function escapeSingleQuotesForAttr(unsafe) {
+     return unsafe.replace(/'/g, "&#039;"); // Escape single quotes
+}
 
 
+// Main function to build the website
 function buildWebsite() {
+    let iconifyJson; // Declare iconifyJson here in the function scope
+
     try {
         console.log(`[Build] Starting website build process.`);
-        // ... (initial file checks and parsing) ...
+        console.log(`[Build] Checking for icons.json at: ${iconsJsonPath}`);
 
-        const icons = iconifyJson.icons || {};
+        if (!fs.existsSync(iconsJsonPath)) {
+            console.error(`[Build] Error: icons.json not found at ${iconsJsonPath}.`);
+            console.error(`[Build] Please ensure you have downloaded icons.json from the Figma plugin and placed it at the root of the repository.`);
+            process.exit(1);
+        }
+        console.log(`[Build] icons.json found.`);
+
+        // 1. Read icons.json
+        const fileContent = fs.readFileSync(iconsJsonPath, 'utf-8');
+
+        console.log(`[Build] Read file content successfully. Content length: ${fileContent.length}`);
+         if (fileContent.trim().length === 0) {
+              console.error("[Build] Error: icons.json appears to be empty. Exiting.");
+              console.error("Reason: The file was read but contains only whitespace or is empty.");
+              process.exit(1);
+         }
+         console.log(`[Build] File content is not empty. First 100 chars: ${fileContent.substring(0, 100)}`);
+
+
+        // 2. Parse icons.json content
+        console.log('[Build] Attempting to parse JSON...');
+        try {
+            iconifyJson = JSON.parse(fileContent);
+            console.log('[Build] JSON.parse executed.');
+        } catch (e) {
+             console.error('[Build] JSON Parsing Error: Failed to parse icons.json.');
+             console.error('[Build] Parsing error details:', e.message);
+             // Re-throw the error to be caught by the outer catch block and trigger exit
+             throw e;
+        }
+
+        // --- Debug Checks: Verify iconifyJson after parsing ---
+        console.log(`[Build] Checking state of 'iconifyJson' variable:`);
+        console.log(`[Build] - Type of iconifyJson: ${typeof iconifyJson}`);
+        console.log(`[Build] - Is iconifyJson null: ${iconifyJson === null}`);
+        console.log(`[Build] - Is iconifyJson undefined: ${typeof iconifyJson === 'undefined'}`);
+        console.log(`[Build] - Is iconifyJson an object: ${typeof iconifyJson === 'object' && iconifyJson !== null && !Array.isArray(iconifyJson)}`);
+        // --- End Debug Checks ---
+
+
+        console.log('[Build] Checking parsed JSON structure:'); // This line is likely close to the error origin (line 22)
+        // --- Structure Checks ---
+        if (typeof iconifyJson !== 'object' || iconifyJson === null || Array.isArray(iconifyJson)) {
+             console.error('[Build] Error: Parsed JSON is not an object as expected.');
+             process.exit(1);
+        }
+        console.log(`[Build] - Has 'prefix' property: ${iconifyJson.hasOwnProperty('prefix')}`);
+        console.log(`[Build] - Has 'icons' property: ${iconifyJson.hasOwnProperty('icons')}`);
+        console.log(`[Build] - 'icons' property is an object: ${typeof iconifyJson.icons === 'object' && iconifyJson.icons !== null && !Array.isArray(iconifyJson.icons)}`);
+
+        if (!iconifyJson.hasOwnProperty('icons') || typeof iconifyJson.icons !== 'object' || iconifyJson.icons === null || Array.isArray(iconifyJson.icons)) {
+            console.error('[Build] Error: Parsed JSON does not contain a valid "icons" object property.');
+             console.error(`[Build] Structure check failed. Full parsed object (first 200 chars): ${JSON.stringify(iconifyJson).substring(0, 200)}`);
+            process.exit(1);
+        }
+        // --- End Structure Checks ---
+
+
+        const icons = iconifyJson.icons || {}; // Should be an object if previous checks passed
+
         const defaultWidth = iconifyJson.width || 24;
         const defaultHeight = iconifyJson.height || 24;
 
@@ -29,15 +106,13 @@ function buildWebsite() {
         // 3. Read the source HTML template
         let htmlContent = fs.readFileSync(srcHtmlPath, 'utf-8');
         console.log(`[Build] Read source HTML template from: ${srcHtmlPath}`);
-        // --- Debug: Check if placeholder exists in template ---
-        if (htmlContent.includes('')) {
-            console.log('[Build] Placeholder comment found in source HTML template.');
-        } else {
+         // Check placeholder exists
+        if (!htmlContent.includes('')) {
             console.error('[Build] Error: Placeholder comment NOT found in source HTML template!');
             console.error('Reason: The comment "" must be exactly present in src/index.html');
-             process.exit(1); // Exit if placeholder is missing
+             process.exit(1);
         }
-         // --- End Debug ---
+         console.log('[Build] Placeholder comment found in source HTML template.');
 
 
         // 4. Generate HTML for icons
@@ -53,7 +128,7 @@ function buildWebsite() {
              iconNames.forEach(iconName => {
                  const iconData = icons[iconName];
 
-                 if (!iconData || typeof iconData.body !== 'string' || iconData.body.trim() === '') { // Also check if body is empty
+                 if (!iconData || typeof iconData.body !== 'string' || iconData.body.trim() === '') {
                       console.warn(`[Build] Warning: Skipping invalid icon data for "${escapeHtml(iconName)}". Missing 'body', 'body' is not a string, or 'body' is empty.`);
                       return; // Skip this icon
                  }
@@ -61,7 +136,6 @@ function buildWebsite() {
                  const iconWidth = iconData.width || defaultWidth;
                  const iconHeight = iconData.height || defaultHeight;
 
-                 // Embed SVG directly for preview.
                  const svgNs = "http://www.w3.org/2000/svg";
                  const svgHtml = `<svg xmlns="${svgNs}" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${iconWidth} ${iconHeight}" style="width: 64px; height: 64px; display: block; margin: 0 auto 15px auto;">${iconData.body}</svg>`;
 
@@ -88,13 +162,11 @@ function buildWebsite() {
               console.log('[Build] Finished generating HTML for icons.');
          }
 
-         // --- Debug: Check generated iconsHtml content ---
          console.log(`[Build] Generated iconsHtml length: ${iconsHtml.length}`);
          console.log(`[Build] First 500 chars of generated iconsHtml:\n${iconsHtml.substring(0, 500)}`);
          if (iconsHtml.trim().length === 0 && iconNames.length > 0) {
               console.warn('[Build] Warning: No HTML was generated despite finding icons in JSON. Check icon data validity.');
          }
-         // --- End Debug ---
 
 
         // 5. Inject generated icons HTML into the template
@@ -102,15 +174,13 @@ function buildWebsite() {
         const finalHtmlContent = htmlContent.replace('', iconsHtml);
         console.log('[Build] String replacement performed.');
 
-        // --- Debug: Check if replacement was successful ---
         if (finalHtmlContent.includes('')) {
             console.error("[Build] Error: Placeholder comment was NOT replaced in the final HTML!");
             console.error('Reason: The string replacement likely failed. Check the placeholder in src/index.html');
-             process.exit(1); // Exit if replacement didn't work
+             process.exit(1);
         } else {
              console.log("[Build] Placeholder comment successfully replaced in final HTML.");
         }
-         // --- End Debug ---
 
 
         // 6. Create output directory if it doesn't exist
@@ -148,16 +218,18 @@ function buildWebsite() {
             console.error('[Build] Parsing error details:', error.message);
         } else {
              console.error(`[Build] An unexpected error occurred during the build process: ${error.message}`);
+             // Log the stack only for unexpected errors, not handled file/syntax errors
              if (error.stack) {
                  console.error('[Build] Error Stack:', error.stack);
              }
         }
 
-        process.exit(1); // Exit with error code
+        process.exit(1); // Exit with error code to signal failure
     }
 }
 
 // ... (escapeHtml and escapeSingleQuotesForAttr functions remain below) ...
+
 
 // Call the build function
 buildWebsite();
