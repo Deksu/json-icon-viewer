@@ -39,7 +39,7 @@ jobs:
           # Automatically provided by GitHub Actions with write permissions to the repo
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # The directory containing the static files to deploy (output of our build script)
-          publish_dir: ./src
+          publish_dir: ./dist
           # The branch GitHub Pages will serve from. 'gh-pages' is standard, but you can use 'main'
           # if your repo settings are configured to deploy from 'main' branch /docs folder.
           publish_branch: gh-pages # The branch the action will push the built site to
