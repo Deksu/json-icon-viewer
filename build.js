@@ -6,7 +6,7 @@ const path = require('path');
 const iconsJsonPath = path.join(__dirname, 'icons.json');
 const srcHtmlPath = path.join(__dirname, 'src', 'index.html');
 const srcCssPath = path.join(__dirname, 'src', 'style.css');
-const srcJsPath = path.join(__dirname, 'script.js'); // Assume script.js is also in src
+const srcJsPath = path.join(__dirname, 'src', 'script.js'); // <-- This is correct
 
 const distDir = path.join(__dirname, 'dist'); // Output directory for built website
 const destHtmlPath = path.join(distDir, 'index.html');
